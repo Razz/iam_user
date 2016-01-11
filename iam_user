@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+import boto3
+import sys
+
+def delete(session_bucket, user_name):
+    for account in session_bucket:
+        user = account.resource('iam').User(user_name)
+        try:
+            [user.remove_group(group.name) for group in user.groups.all()]
+            [key.delete() for key in user.access_keys.all()]
+            [user.detach_policy(policy.arn) for policy in user.attached_policies\
+             .all()]
+            user.LoginProfile().delete()
+            user.delete()
+        except AttributeError:
+            sys.stderror.write("User not found")
+
+def add(session_bucket, user_name):
+    for account in session_bucket:
+        iam = account.resource('iam')
+        iam.create_user(UserName = user_name)
+        iam.LoginProfile(user_name).create(Password='Password123',
+                                        PasswordResetRequired=True)
+
+try:
+    command = sys.argv[1]
+    user_name = sys.argv[2]
+    session_bucket = []
+    try:
+        for profile in sys.argv[3:]:
+            session_bucket.append(boto3.session.Session(profile_name = profile))
+    except IndexError:
+        session_bucket.append(boto3.session.Session(profile_name = "default"))
+
+    if command == "add":
+        add(session_bucket, user_name)
+    elif command == "delete":
+        delete(session_bucket, user_name)
+except IndexError:
+    print "Invalid arguments; iam_user {add|delete} username profiles (blank = default)"
